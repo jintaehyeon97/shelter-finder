@@ -5,7 +5,7 @@ import { useRoute, RouteProp } from '@react-navigation/native';
 import { useCurrentLocation } from '@/hooks/useLocation';
 import { fetchNearbyStores } from '@/api/stores';
 import { fetchNearbyShelters } from '@/api/shelters';
-import { fetchShadyWalkingRoute, fetchTransitRoutes } from '@/api/directions';
+import { fetchShadyWalkingRoute, fetchTransitRoutes, reclassifyShade, fetchShadeForecast, ShadeForecastEntry } from '@/api/directions';
 import { ConvenienceStore } from '@/types/store';
 import { Shelter } from '@/types/shelter';
 import { ShadyRoute } from '@/types/shadyRoute';
@@ -75,6 +75,7 @@ export default function MapScreen() {
   // 도보(그늘 포함) 경로 상태
   const [route, setRoute] = useState<ShadyRoute | null>(null);
   const [routeVersion, setRouteVersion] = useState(0);
+  const [shadeForecast, setShadeForecast] = useState<ShadeForecastEntry[] | null>(null);
 
   // 대중교통 경로 상태
   const [transitItineraries, setTransitItineraries] = useState<TransitItinerary[] | null>(null);
@@ -144,6 +145,7 @@ export default function MapScreen() {
 
   const clearRoute = () => {
     setRoute(null);
+    setShadeForecast(null);
     setTransitItineraries(null);
     setSelectedTransitIndex(0);
     setTravelMode(null);
@@ -175,6 +177,13 @@ export default function MapScreen() {
           edgePadding: { top: 100, right: 60, bottom: 260, left: 60 },
           animated: true,
         });
+        // 최초 안내 시작할 때만 시간대별 그늘 비교도 같이 조회 (실시간 갱신 때는 스킵)
+        fetchShadeForecast(
+          origin,
+          result.segments.map((s) => ({ coordinates: s.coordinates, distance: s.distance, time: s.time }))
+        )
+          .then(setShadeForecast)
+          .catch((e) => console.warn('그늘 시간대 예측 실패', e));
       }
       return true;
     } catch (e) {
@@ -555,6 +564,39 @@ export default function MapScreen() {
               </Text>
             </View>
           </View>
+          {shadeForecast && shadeForecast.length > 0 && (
+            <View style={styles.forecastRow}>
+              <Text style={styles.forecastLabel}>🕐 시간대별 그늘 비교</Text>
+              <View style={styles.forecastChips}>
+                {shadeForecast.map((f) => {
+                  const best =
+                    f.shadeRatio ===
+                    Math.max(...shadeForecast.map((x) => x.shadeRatio));
+                  const label =
+                    f.offsetMinutes === 0
+                      ? '지금'
+                      : f.offsetMinutes < 60
+                        ? `${f.offsetMinutes}분후`
+                        : `${Math.round(f.offsetMinutes / 60)}시간후`;
+                  return (
+                    <View
+                      key={f.offsetMinutes}
+                      style={[styles.forecastChip, best && styles.forecastChipBest]}
+                    >
+                      <Text
+                        style={[
+                          styles.forecastChipText,
+                          best && styles.forecastChipTextBest,
+                        ]}
+                      >
+                        {label} {Math.round(f.shadeRatio * 100)}%
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          )}
           <View style={styles.legendRow}>
             <View style={styles.legendItem}>
               <View style={[styles.legendDot, { backgroundColor: SHADE_COLOR }]} />
@@ -757,6 +799,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   shadeBadgeText: { fontSize: 12, fontWeight: '600', color: Colors.primaryDark },
+  forecastRow: { marginTop: 10 },
+  forecastLabel: { fontSize: 11, color: Colors.textSecondary, marginBottom: 4 },
+  forecastChips: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
+  forecastChip: {
+    backgroundColor: Colors.backgroundSubtle,
+    borderRadius: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+  },
+  forecastChipBest: { backgroundColor: Colors.primary },
+  forecastChipText: { fontSize: 11, fontWeight: '600', color: Colors.textPrimary },
+  forecastChipTextBest: { color: Colors.textOnPrimary },
   legendRow: { flexDirection: 'row', gap: 10, marginTop: 8, flexWrap: 'wrap' },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },

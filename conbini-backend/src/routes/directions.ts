@@ -179,6 +179,8 @@ router.get('/shady-walking', async (req: Request, res: Response) => {
         coordinates: s.coordinates,
         isShaded: s.isShaded,
         source: s.source,
+        distance: s.distance,
+        time: s.time,
       })),
       shadeSummary: {
         totalShadedTime: Math.round(stats.totalShadedTime),
@@ -195,6 +197,116 @@ router.get('/shady-walking', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('그늘 경로 계산 실패:', err.response?.data ?? err.message);
     res.status(500).json({ error: '경로 조회 중 오류가 발생했습니다.' });
+  }
+});
+
+interface SegmentInput {
+  coordinates: LatLng[];
+  distance: number;
+  time: number;
+}
+
+/**
+ * POST /directions/reclassify-shade
+ * body: { originLat, originLng, segments: [{ coordinates, distance, time }] }
+ *
+ * 이미 계산된 경로(TMAP 재호출 없이)를 그대로 두고, 현재 시각 기준으로
+ * 그늘/노출 판정만 다시 계산합니다. 걷는 동안 시간이 지나 태양 위치가
+ * 바뀌었을 때, 가볍게(TMAP API 호출 없이) 갱신하기 위한 용도입니다.
+ */
+router.post('/reclassify-shade', async (req: Request, res: Response) => {
+  const { originLat, originLng, segments: rawSegments } = req.body ?? {};
+
+  if (
+    typeof originLat !== 'number' ||
+    typeof originLng !== 'number' ||
+    !Array.isArray(rawSegments) ||
+    rawSegments.length === 0
+  ) {
+    return res.status(400).json({ error: 'originLat, originLng, segments가 필요합니다.' });
+  }
+
+  try {
+    const segmentsInput: SegmentInput[] = rawSegments;
+    const sun = getSolarPosition(new Date(), originLat, originLng);
+    const segments = classifySegments(segmentsInput, sun);
+    const stats = computeExposureStats(segments);
+    const totalTime = segmentsInput.reduce((sum, s) => sum + s.time, 0);
+
+    const warning =
+      stats.maxContinuousExposure > MAX_CONTINUOUS_EXPOSURE_SEC
+        ? '이 경로는 연속 직사광선 노출이 3분을 넘는 구간이 있어요. 그늘막이나 양산을 챙기는 걸 추천해요.'
+        : null;
+
+    res.json({
+      segments: segments.map((s) => ({
+        coordinates: s.coordinates,
+        isShaded: s.isShaded,
+        source: s.source,
+        distance: s.distance,
+        time: s.time,
+      })),
+      shadeSummary: {
+        totalShadedTime: Math.round(stats.totalShadedTime),
+        totalExposedTime: Math.round(stats.totalExposedTime),
+        maxContinuousExposureSec: Math.round(stats.maxContinuousExposure),
+        shadeRatio: totalTime > 0 ? stats.totalShadedTime / totalTime : 0,
+      },
+      warning,
+      sun: {
+        altitudeDeg: Math.round(sun.altitudeDeg * 10) / 10,
+        azimuthDeg: Math.round(sun.azimuthDeg * 10) / 10,
+      },
+    });
+  } catch (err: any) {
+    console.error('그늘 재계산 실패:', err.message);
+    res.status(500).json({ error: '그늘 재계산 중 오류가 발생했습니다.' });
+  }
+});
+
+/**
+ * POST /directions/shade-forecast
+ * body: { originLat, originLng, segments: [{ coordinates, distance, time }] }
+ *
+ * 같은 경로를 지금/1시간후/3시간후 세 시점 기준으로 그늘 비율을 비교해서
+ * "언제 출발하면 더 그늘질지" 판단할 수 있는 요약 정보를 반환합니다.
+ * (TMAP 재호출 없이 태양 위치 계산만 시점별로 반복)
+ */
+const FORECAST_OFFSETS_MIN = [0, 60, 180];
+
+router.post('/shade-forecast', async (req: Request, res: Response) => {
+  const { originLat, originLng, segments: rawSegments } = req.body ?? {};
+
+  if (
+    typeof originLat !== 'number' ||
+    typeof originLng !== 'number' ||
+    !Array.isArray(rawSegments) ||
+    rawSegments.length === 0
+  ) {
+    return res.status(400).json({ error: 'originLat, originLng, segments가 필요합니다.' });
+  }
+
+  try {
+    const segmentsInput: SegmentInput[] = rawSegments;
+    const totalTime = segmentsInput.reduce((sum, s) => sum + s.time, 0);
+
+    const forecasts = FORECAST_OFFSETS_MIN.map((offsetMinutes) => {
+      const atTime = new Date(Date.now() + offsetMinutes * 60 * 1000);
+      const sun = getSolarPosition(atTime, originLat, originLng);
+      const segments = classifySegments(segmentsInput, sun);
+      const stats = computeExposureStats(segments);
+
+      return {
+        offsetMinutes,
+        shadeRatio: totalTime > 0 ? stats.totalShadedTime / totalTime : 0,
+        maxContinuousExposureSec: Math.round(stats.maxContinuousExposure),
+      };
+    });
+
+    res.json({ forecasts });
+  } catch (err: any) {
+    console.error('그늘 시간대 예측 실패:', err.message);
+    res.status(500).json({ error: '그늘 시간대 예측 중 오류가 발생했습니다.' });
   }
 });
 

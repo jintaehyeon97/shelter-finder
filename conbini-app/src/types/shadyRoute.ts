@@ -2,6 +2,8 @@ export interface ShadySegment {
   coordinates: { latitude: number; longitude: number }[];
   isShaded: boolean;
   source: 'building' | 'none';
+  distance: number; // 미터
+  time: number; // 초
 }
 
 export interface ShadeSummary {
