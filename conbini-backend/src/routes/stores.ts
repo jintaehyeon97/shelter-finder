@@ -1,11 +1,11 @@
 import { Router, Request, Response } from 'express';
-import { pool } from '../db';
+import { fetchNearbyConvenienceStores, searchConvenienceStoresByKeyword } from '../utils/kakaoLocal';
 
 const router = Router();
 
 /**
  * GET /stores/nearby?lat=&lng=&radius=
- * 반경 내 편의점 조회 (기본 반경 1000m)
+ * 반경 내 편의점을 카카오 로컬 API로 실시간 조회 (기본 반경 1000m)
  */
 router.get('/nearby', async (req: Request, res: Response) => {
   const lat = parseFloat(req.query.lat as string);
@@ -17,28 +17,17 @@ router.get('/nearby', async (req: Request, res: Response) => {
   }
 
   try {
-    const { rows } = await pool.query(
-      `SELECT
-         id, name, brand, address, road_address AS "roadAddress",
-         ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng,
-         ST_Distance(location, ST_MakePoint($1, $2)::geography) AS distance
-       FROM convenience_stores
-       WHERE ST_DWithin(location, ST_MakePoint($1, $2)::geography, $3)
-         AND verify_miss_count < 2
-       ORDER BY distance
-       LIMIT 200`,
-      [lng, lat, radius]
-    );
-    res.json(rows);
-  } catch (err) {
-    console.error(err);
+    const stores = await fetchNearbyConvenienceStores(lat, lng, radius);
+    res.json(stores);
+  } catch (err: any) {
+    console.error('카카오 조회 실패:', err.response?.data ?? err.message);
     res.status(500).json({ error: '조회 중 오류가 발생했습니다.' });
   }
 });
 
 /**
  * GET /stores/search?q=
- * 상호명/주소 검색
+ * 상호명/지역명 검색을 카카오 로컬 API로 실시간 조회
  */
 router.get('/search', async (req: Request, res: Response) => {
   const q = (req.query.q as string)?.trim();
@@ -47,21 +36,10 @@ router.get('/search', async (req: Request, res: Response) => {
   }
 
   try {
-    const { rows } = await pool.query(
-      `SELECT
-         id, name, brand, address, road_address AS "roadAddress",
-         ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng
-       FROM convenience_stores
-       WHERE (name ILIKE '%' || $1 || '%'
-          OR address ILIKE '%' || $1 || '%'
-          OR road_address ILIKE '%' || $1 || '%')
-         AND verify_miss_count < 2
-       LIMIT 50`,
-      [q]
-    );
-    res.json(rows);
-  } catch (err) {
-    console.error(err);
+    const stores = await searchConvenienceStoresByKeyword(q);
+    res.json(stores);
+  } catch (err: any) {
+    console.error('카카오 검색 실패:', err.response?.data ?? err.message);
     res.status(500).json({ error: '검색 중 오류가 발생했습니다.' });
   }
 });
