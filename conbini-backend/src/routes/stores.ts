@@ -26,8 +26,9 @@ router.get('/nearby', async (req: Request, res: Response) => {
 });
 
 /**
- * GET /stores/search?q=
+ * GET /stores/search?q=&lat=&lng=
  * 상호명/지역명 검색을 카카오 로컬 API로 실시간 조회
+ * lat/lng을 같이 넘기면 그 위치 근처 위주로(거리순) 검색됩니다.
  */
 router.get('/search', async (req: Request, res: Response) => {
   const q = (req.query.q as string)?.trim();
@@ -35,8 +36,16 @@ router.get('/search', async (req: Request, res: Response) => {
     return res.json([]);
   }
 
+  const lat = parseFloat(req.query.lat as string);
+  const lng = parseFloat(req.query.lng as string);
+  const hasLocation = !Number.isNaN(lat) && !Number.isNaN(lng);
+
   try {
-    const stores = await searchConvenienceStoresByKeyword(q);
+    const stores = await searchConvenienceStoresByKeyword(
+      q,
+      hasLocation ? lat : undefined,
+      hasLocation ? lng : undefined
+    );
     res.json(stores);
   } catch (err: any) {
     console.error('카카오 검색 실패:', err.response?.data ?? err.message);

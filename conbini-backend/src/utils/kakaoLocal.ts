@@ -77,9 +77,18 @@ export async function fetchNearbyConvenienceStores(
 /**
  * 상호명/지역명으로 편의점을 카카오 로컬 API로 실시간 검색합니다.
  * (키워드 검색, 최대 3페이지=45건까지)
+ *
+ * lat/lng을 넘기면 그 위치 근처를 우선으로(거리순) 검색합니다.
+ * 안 넘기면 카카오 기본 정확도순(전국 대상)으로 검색됩니다.
  */
-export async function searchConvenienceStoresByKeyword(keyword: string): Promise<KakaoStore[]> {
+export async function searchConvenienceStoresByKeyword(
+  keyword: string,
+  lat?: number,
+  lng?: number
+): Promise<KakaoStore[]> {
   const results: any[] = [];
+  const hasLocation = typeof lat === 'number' && typeof lng === 'number';
+
   for (let page = 1; page <= 3; page++) {
     const { data } = await axios.get('https://dapi.kakao.com/v2/local/search/keyword.json', {
       params: {
@@ -87,6 +96,14 @@ export async function searchConvenienceStoresByKeyword(keyword: string): Promise
         category_group_code: CONVENIENCE_STORE_CATEGORY,
         page,
         size: 15,
+        ...(hasLocation
+          ? {
+              x: String(lng),
+              y: String(lat),
+              radius: 20000, // 위치 있으면 반경 20km 이내 위주로, 거리순 정렬
+              sort: 'distance',
+            }
+          : {}),
       },
       headers: { Authorization: `KakaoAK ${KAKAO_REST_API_KEY}` },
       timeout: 5000,

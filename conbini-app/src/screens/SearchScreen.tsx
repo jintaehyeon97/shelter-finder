@@ -16,6 +16,7 @@ import { ConvenienceStore } from '@/types/store';
 import { Shelter } from '@/types/shelter';
 import { RootTabParamList } from '@/navigation/RootNavigator';
 import { Colors } from '@/theme/colors';
+import { useCurrentLocation } from '@/hooks/useLocation';
 
 type Nav = BottomTabNavigationProp<RootTabParamList>;
 
@@ -25,6 +26,7 @@ type SearchSection =
 
 export default function SearchScreen() {
   const navigation = useNavigation<Nav>();
+  const { location } = useCurrentLocation();
   const [keyword, setKeyword] = useState('');
   const [storeResults, setStoreResults] = useState<ConvenienceStore[]>([]);
   const [shelterResults, setShelterResults] = useState<Shelter[]>([]);
@@ -43,7 +45,7 @@ export default function SearchScreen() {
     setSearched(true);
     try {
       const [stores, shelters] = await Promise.all([
-        searchStores(text),
+        searchStores(text, location ?? undefined),
         searchShelters(text, '무더위쉼터'),
       ]);
       setStoreResults(stores);

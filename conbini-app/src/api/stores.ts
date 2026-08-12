@@ -12,9 +12,15 @@ export async function fetchNearbyStores(
   return data;
 }
 
-export async function searchStores(keyword: string): Promise<ConvenienceStore[]> {
+export async function searchStores(
+  keyword: string,
+  location?: { latitude: number; longitude: number }
+): Promise<ConvenienceStore[]> {
   const { data } = await apiClient.get<ConvenienceStore[]>('/stores/search', {
-    params: { q: keyword },
+    params: {
+      q: keyword,
+      ...(location ? { lat: location.latitude, lng: location.longitude } : {}),
+    },
   });
   return data;
 }
