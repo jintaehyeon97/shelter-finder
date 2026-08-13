@@ -78,9 +78,10 @@ export async function reclassifyShade(
 }
 
 export interface ShadeForecastEntry {
-  offsetMinutes: number; // 0=지금, 60=1시간후, 180=3시간후
+  offsetMinutes: number; // 0, 30, 60, 90, 120, 150, 180 (분 단위)
   shadeRatio: number; // 0~1
   maxContinuousExposureSec: number;
+  segments: ShadySegment[];
 }
 
 /**

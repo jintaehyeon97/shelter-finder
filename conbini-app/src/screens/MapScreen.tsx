@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View, ActivityIndicator, Text, Pressable, Alert } from 'react-native';
 import MapView, { Marker, Polyline, Region } from 'react-native-maps';
+import Slider from '@react-native-community/slider';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import { useCurrentLocation } from '@/hooks/useLocation';
 import { fetchNearbyStores } from '@/api/stores';
@@ -79,6 +80,7 @@ export default function MapScreen() {
   const [route, setRoute] = useState<ShadyRoute | null>(null);
   const [routeVersion, setRouteVersion] = useState(0);
   const [shadeForecast, setShadeForecast] = useState<ShadeForecastEntry[] | null>(null);
+  const [selectedOffsetMinutes, setSelectedOffsetMinutes] = useState(0);
 
   // 대중교통 경로 상태
   const [transitItineraries, setTransitItineraries] = useState<TransitItinerary[] | null>(null);
@@ -153,6 +155,7 @@ export default function MapScreen() {
   const clearRoute = () => {
     setRoute(null);
     setShadeForecast(null);
+    setSelectedOffsetMinutes(0);
     setTransitItineraries(null);
     setSelectedTransitIndex(0);
     setTravelMode(null);
@@ -185,6 +188,7 @@ export default function MapScreen() {
           animated: true,
         });
         // 최초 안내 시작할 때만 시간대별 그늘 비교도 같이 조회 (실시간 갱신 때는 스킵)
+        setSelectedOffsetMinutes(0);
         fetchShadeForecast(
           origin,
           result.segments.map((s) => ({ coordinates: s.coordinates, distance: s.distance, time: s.time }))
@@ -361,6 +365,18 @@ export default function MapScreen() {
       ? transitItineraries[selectedTransitIndex]
       : null;
 
+  // 슬라이더로 선택한 시간대의 그늘 정보 (0분=지금은 실시간 갱신되는 route를 그대로 씀)
+  const selectedForecast =
+    selectedOffsetMinutes === 0
+      ? null
+      : shadeForecast?.find((f) => f.offsetMinutes === selectedOffsetMinutes) ?? null;
+
+  const displaySegments = selectedForecast ? selectedForecast.segments : route?.segments ?? [];
+  const displayShadeRatio = selectedForecast ? selectedForecast.shadeRatio : route?.shadeSummary.shadeRatio ?? 0;
+  const displayMaxExposure = selectedForecast
+    ? selectedForecast.maxContinuousExposureSec
+    : route?.shadeSummary.maxContinuousExposureSec ?? 0;
+
   return (
     <View style={styles.container}>
       <MapView
@@ -408,9 +424,9 @@ export default function MapScreen() {
               lineJoin="round"
               zIndex={1}
             />
-            {route.segments.map((seg, idx) => (
+            {displaySegments.map((seg, idx) => (
               <Polyline
-                key={`seg-${routeVersion}-${idx}`}
+                key={`seg-${routeVersion}-${selectedOffsetMinutes}-${idx}`}
                 coordinates={seg.coordinates}
                 strokeColor={segmentColor(seg.source)}
                 strokeWidth={5}
@@ -568,45 +584,42 @@ export default function MapScreen() {
           <View style={styles.shadeBadgeRow}>
             <View style={styles.shadeBadge}>
               <Text style={styles.shadeBadgeText}>
-                🌳 그늘 {Math.round(route.shadeSummary.shadeRatio * 100)}%
+                🌳 그늘 {Math.round(displayShadeRatio * 100)}%
               </Text>
             </View>
             <View style={styles.shadeBadge}>
               <Text style={styles.shadeBadgeText}>
-                ☀️ 최대 연속노출 {route.shadeSummary.maxContinuousExposureSec}초
+                ☀️ 최대 연속노출 {displayMaxExposure}초
               </Text>
             </View>
           </View>
           {shadeForecast && shadeForecast.length > 0 && (
             <View style={styles.forecastRow}>
-              <Text style={styles.forecastLabel}>🕐 시간대별 그늘 비교</Text>
-              <View style={styles.forecastChips}>
-                {shadeForecast.map((f) => {
-                  const best =
-                    f.shadeRatio ===
-                    Math.max(...shadeForecast.map((x) => x.shadeRatio));
-                  const label =
-                    f.offsetMinutes === 0
-                      ? '지금'
-                      : f.offsetMinutes < 60
-                        ? `${f.offsetMinutes}분후`
-                        : `${Math.round(f.offsetMinutes / 60)}시간후`;
-                  return (
-                    <View
-                      key={f.offsetMinutes}
-                      style={[styles.forecastChip, best && styles.forecastChipBest]}
-                    >
-                      <Text
-                        style={[
-                          styles.forecastChipText,
-                          best && styles.forecastChipTextBest,
-                        ]}
-                      >
-                        {label} {Math.round(f.shadeRatio * 100)}%
-                      </Text>
-                    </View>
-                  );
-                })}
+              <Text style={styles.forecastLabel}>
+                🕐{' '}
+                {selectedOffsetMinutes === 0
+                  ? '지금'
+                  : selectedOffsetMinutes < 60
+                    ? `${selectedOffsetMinutes}분 후`
+                    : `${(selectedOffsetMinutes / 60).toFixed(selectedOffsetMinutes % 60 === 0 ? 0 : 1)}시간 후`}{' '}
+                기준 · 슬라이더로 다른 시간대 그늘도 볼 수 있어요
+              </Text>
+              <Slider
+                style={styles.forecastSlider}
+                minimumValue={0}
+                maximumValue={180}
+                step={30}
+                value={selectedOffsetMinutes}
+                minimumTrackTintColor={Colors.primary}
+                maximumTrackTintColor={Colors.border}
+                thumbTintColor={Colors.primary}
+                onValueChange={(v: number) => setSelectedOffsetMinutes(Math.round(v / 30) * 30)}
+              />
+              <View style={styles.forecastSliderLabels}>
+                <Text style={styles.forecastSliderLabelText}>지금</Text>
+                <Text style={styles.forecastSliderLabelText}>1시간</Text>
+                <Text style={styles.forecastSliderLabelText}>2시간</Text>
+                <Text style={styles.forecastSliderLabelText}>3시간</Text>
               </View>
             </View>
           )}
@@ -620,7 +633,9 @@ export default function MapScreen() {
               <Text style={styles.legendText}>노출</Text>
             </View>
           </View>
-          {route.warning && <Text style={styles.routeWarning}>{route.warning}</Text>}
+          {selectedOffsetMinutes === 0 && route.warning && (
+            <Text style={styles.routeWarning}>{route.warning}</Text>
+          )}
         </View>
       ) : travelMode === 'TRANSIT' && selectedItinerary ? (
         <View style={styles.routeSummary}>
@@ -828,17 +843,14 @@ const styles = StyleSheet.create({
   },
   shadeBadgeText: { fontSize: 12, fontWeight: '600', color: Colors.primaryDark },
   forecastRow: { marginTop: 10 },
-  forecastLabel: { fontSize: 11, color: Colors.textSecondary, marginBottom: 4 },
-  forecastChips: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
-  forecastChip: {
-    backgroundColor: Colors.backgroundSubtle,
-    borderRadius: 8,
-    paddingVertical: 5,
-    paddingHorizontal: 9,
+  forecastLabel: { fontSize: 11, color: Colors.textSecondary, marginBottom: 2 },
+  forecastSlider: { width: '100%', height: 32 },
+  forecastSliderLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: -6,
   },
-  forecastChipBest: { backgroundColor: Colors.primary },
-  forecastChipText: { fontSize: 11, fontWeight: '600', color: Colors.textPrimary },
-  forecastChipTextBest: { color: Colors.textOnPrimary },
+  forecastSliderLabelText: { fontSize: 10, color: Colors.textSecondary },
   legendRow: { flexDirection: 'row', gap: 10, marginTop: 8, flexWrap: 'wrap' },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },

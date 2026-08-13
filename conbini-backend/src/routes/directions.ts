@@ -268,11 +268,11 @@ router.post('/reclassify-shade', async (req: Request, res: Response) => {
  * POST /directions/shade-forecast
  * body: { originLat, originLng, segments: [{ coordinates, distance, time }] }
  *
- * 같은 경로를 지금/1시간후/3시간후 세 시점 기준으로 그늘 비율을 비교해서
- * "언제 출발하면 더 그늘질지" 판단할 수 있는 요약 정보를 반환합니다.
- * (TMAP 재호출 없이 태양 위치 계산만 시점별로 반복)
+ * 같은 경로를 여러 시점(0~180분, 30분 간격) 기준으로 그늘 정보를 미리 계산해서
+ * 슬라이더로 "언제 출발하면 더 그늘질지" 비교해볼 수 있게 합니다.
+ * (TMAP 재호출 없이 태양 위치 계산만 시점별로 반복 - 각 시점마다 구간별 색상도 포함)
  */
-const FORECAST_OFFSETS_MIN = [0, 60, 180];
+const FORECAST_OFFSETS_MIN = [0, 30, 60, 90, 120, 150, 180];
 
 router.post('/shade-forecast', async (req: Request, res: Response) => {
   const { originLat, originLng, segments: rawSegments } = req.body ?? {};
@@ -300,6 +300,13 @@ router.post('/shade-forecast', async (req: Request, res: Response) => {
         offsetMinutes,
         shadeRatio: totalTime > 0 ? stats.totalShadedTime / totalTime : 0,
         maxContinuousExposureSec: Math.round(stats.maxContinuousExposure),
+        segments: segments.map((s) => ({
+          coordinates: s.coordinates,
+          isShaded: s.isShaded,
+          source: s.source,
+          distance: s.distance,
+          time: s.time,
+        })),
       };
     });
 
