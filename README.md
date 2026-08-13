@@ -46,8 +46,11 @@ React Native(Expo) 앱과 Node.js/Express 백엔드로 구성된 풀스택 개�
 ## 기술 스택
 
 **프론트엔드**: React Native, Expo, TypeScript, React Navigation, react-native-maps
+
 **백엔드**: Node.js, Express, TypeScript, PostgreSQL, PostGIS
+
 **외부 API**: 카카오 로컬 API(편의점 실시간 조회), 공공데이터포털(무더위쉼터/공원), TMAP(보행자/대중교통 경로), 기상청(실시간 기온)
+
 **배포**: Render(백엔드), Supabase(DB)
 
 ## 폴더 구조
