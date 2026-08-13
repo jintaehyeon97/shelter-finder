@@ -6,6 +6,8 @@ import { useCurrentLocation } from '@/hooks/useLocation';
 import { fetchNearbyStores } from '@/api/stores';
 import { fetchNearbyShelters } from '@/api/shelters';
 import { fetchShadyWalkingRoute, fetchTransitRoutes, reclassifyShade, fetchShadeForecast, ShadeForecastEntry } from '@/api/directions';
+import { fetchCurrentWeather } from '@/api/weather';
+import { CurrentWeather } from '@/types/weather';
 import { ConvenienceStore } from '@/types/store';
 import { Shelter } from '@/types/shelter';
 import { ShadyRoute } from '@/types/shadyRoute';
@@ -63,6 +65,7 @@ export default function MapScreen() {
   const [stores, setStores] = useState<ConvenienceStore[]>([]);
   const [shelters, setShelters] = useState<Shelter[]>([]);
   const [loadingData, setLoadingData] = useState(false);
+  const [weather, setWeather] = useState<CurrentWeather | null>(null);
   const [activeFilters, setActiveFilters] = useState<Set<FilterKey>>(
     new Set(['CONVENIENCE_STORE', 'HEAT_SHELTER'])
   );
@@ -99,6 +102,10 @@ export default function MapScreen() {
       })
       .catch((e) => console.warn('데이터 조회 실패', e))
       .finally(() => setLoadingData(false));
+
+    fetchCurrentWeather(location.latitude, location.longitude)
+      .then(setWeather)
+      .catch((e) => console.warn('날씨 조회 실패', e));
   }, [location]);
 
   const toggleFilter = (key: FilterKey) => {
@@ -525,6 +532,12 @@ export default function MapScreen() {
         })}
       </View>
 
+      {weather && weather.temperature != null && (
+        <View style={styles.weatherBadge}>
+          <Text style={styles.weatherBadgeText}>🌡️ {Math.round(weather.temperature)}°C</Text>
+        </View>
+      )}
+
       {loadingData && (
         <View style={styles.loadingBadge}>
           <ActivityIndicator />
@@ -691,6 +704,21 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   loadingBadge: { position: 'absolute', top: 16, right: 16 },
+  weatherBadge: {
+    position: 'absolute',
+    top: 60,
+    right: 16,
+    backgroundColor: Colors.background,
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  weatherBadgeText: { fontSize: 13, fontWeight: '700', color: Colors.textPrimary },
   filterBar: {
     position: 'absolute',
     top: 16,

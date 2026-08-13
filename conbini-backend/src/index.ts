@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import storesRouter from './routes/stores';
 import sheltersRouter from './routes/shelters';
 import directionsRouter from './routes/directions';
+import weatherRouter from './routes/weather';
 
 dotenv.config();
 
@@ -18,6 +19,7 @@ app.get('/health', (_req, res) => {
 app.use('/stores', storesRouter);
 app.use('/shelters', sheltersRouter);
 app.use('/directions', directionsRouter);
+app.use('/weather', weatherRouter);
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 4000;
 
