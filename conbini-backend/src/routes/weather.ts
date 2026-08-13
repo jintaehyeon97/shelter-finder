@@ -6,15 +6,19 @@ const router = Router();
 const KMA_API_KEY = process.env.KMA_API_KEY ?? '';
 
 function getBaseDateTime(): { baseDate: string; baseTime: string } {
+  // 서버가 UTC 등 다른 시간대로 동작할 수 있으므로,
+  // 시스템 시간대와 무관하게 항상 한국시간(KST, UTC+9) 기준으로 계산합니다.
   const now = new Date();
-  // 초단기실황은 매시 40분에 그 시각 데이터가 갱신됨. 40분 전이면 이전 시각 데이터를 씀.
-  if (now.getMinutes() < 40) {
-    now.setHours(now.getHours() - 1);
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+
+  if (kst.getUTCMinutes() < 40) {
+    kst.setUTCHours(kst.getUTCHours() - 1);
   }
-  const baseDate = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(
-    now.getDate()
+
+  const baseDate = `${kst.getUTCFullYear()}${String(kst.getUTCMonth() + 1).padStart(2, '0')}${String(
+    kst.getUTCDate()
   ).padStart(2, '0')}`;
-  const baseTime = `${String(now.getHours()).padStart(2, '0')}00`;
+  const baseTime = `${String(kst.getUTCHours()).padStart(2, '0')}00`;
   return { baseDate, baseTime };
 }
 
